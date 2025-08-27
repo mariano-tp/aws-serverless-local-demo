@@ -1,2 +1,3 @@
-boto3==1.34.162
-matplotlib>=3.8,<4
+boto3==1.35.28
+botocore==1.35.28
+pytest==8.3.2
