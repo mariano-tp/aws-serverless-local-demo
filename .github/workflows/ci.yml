@@ -13,12 +13,25 @@ jobs:
 
     services:
       localstack:
-        image: localstack/localstack:3
+        image: localstack/localstack:latest
         ports:
           - 4566:4566
         env:
-          SERVICES: s3,sqs,dynamodb,iam,lambda,cloudwatch
-          DEBUG: 1
+          SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs"
+          LS_LOG: warn
+        # Healthcheck robusto (sin jq)
+        options: >-
+          --health-cmd="bash -c 'curl -fsS http://localhost:4566/_localstack/health |
+          python - <<PY
+import json,sys
+d=json.load(sys.stdin)
+ok=all(v==\"running\" for v in d.get(\"services\",{}).values())
+print(\"ready\" if ok else \"notready\")
+PY
+          | grep -q ready'"
+          --health-interval=5s
+          --health-retries=30
+          --health-timeout=5s
 
     steps:
       - name: Checkout
@@ -32,110 +45,52 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install awscli-local
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
 
       - name: Wait for LocalStack
         run: |
-          echo "Waiting LocalStack on :4566 ..."
-          for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4566/_localstack/health || true)
-            if [ "$code" = "200" ]; then
-              curl -s http://localhost:4566/_localstack/health; echo
-              break
+          echo "Esperando LocalStack..."
+          for i in {1..60}; do
+            if curl -fsS http://localhost:4566/_localstack/health | \
+               python - <<'PY'
+import json,sys
+d=json.load(sys.stdin)
+ok=all(v=="running" for v in d.get("services",{}).values())
+print("OK" if ok else "NO")
+PY
+            | grep -q OK; then
+              echo "LocalStack listo"; break
             fi
             sleep 2
           done
 
-      - name: Bootstrap infra (S3 + SQS + DDB + Lambda + mapping)
+      - name: Terraform init+apply (deploy Lambdas & recursos)
         env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        shell: bash
         run: |
-          set -euo pipefail
-
-          # ---- S3 y SQS ----
-          awslocal s3 mb s3://events-bucket || true
-          QUEUE_URL=$(awslocal sqs create-queue --queue-name events-queue --query QueueUrl --output text)
-          QUEUE_ARN=$(awslocal sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-
-          # Policy SQS que permite a S3 publicar
-          POLICY=$(python - <<'PY'
-import json, os
-print(json.dumps({
-  "Version":"2012-10-17",
-  "Statement":[{
-    "Effect":"Allow",
-    "Principal":{"Service":"s3.amazonaws.com"},
-    "Action":"SQS:SendMessage",
-    "Resource":os.environ["QUEUE_ARN"],
-    "Condition":{"ArnLike":{"aws:SourceArn":"arn:aws:s3:::events-bucket"}}
-  }]
-}))
-PY
-)
-          awslocal sqs set-queue-attributes --queue-url "$QUEUE_URL" --attributes Policy="$POLICY"
-
-          # Notificación S3 -> SQS
-          awslocal s3api put-bucket-notification-configuration \
-            --bucket events-bucket \
-            --notification-configuration "{\"QueueConfigurations\":[{\"QueueArn\":\"$QUEUE_ARN\",\"Events\":[\"s3:ObjectCreated:*\"]}]}"
-
-          # ---- DynamoDB ----
-          awslocal dynamodb create-table \
-            --table-name events \
-            --attribute-definitions AttributeName=id,AttributeType=S \
-            --key-schema AttributeName=id,KeyType=HASH \
-            --billing-mode PAYPERREQUEST || true
-          awslocal dynamodb wait table-exists --table-name events
-
-          # ---- Lambda (ingestor) ----
-          awslocal iam create-role \
-            --role-name lambda-ex \
-            --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Action":"sts:AssumeRole","Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"}}]}' \
-            >/dev/null 2>&1 || true
-
-          # Zip de la función (empaqueta todo src/)
-          python - <<'PY'
-import shutil, os
-z='/tmp/function.zip'
-try: os.remove(z)
-except FileNotFoundError: pass
-shutil.make_archive('/tmp/function', 'zip', 'src')
-PY
-
-          # Handler: src/handler.py -> function lambda_handler
-          awslocal lambda create-function \
-            --function-name ingestor \
-            --runtime python3.11 \
-            --handler src.handler.lambda_handler \
-            --zip-file fileb:///tmp/function.zip \
-            --role arn:aws:iam::000000000000:role/lambda-ex \
-            --environment Variables="{TABLE_NAME=events}" \
-            >/dev/null 2>&1 || true
-
-          # Mapeo SQS -> Lambda
-          awslocal lambda create-event-source-mapping \
-            --function-name ingestor \
-            --event-source-arn "$QUEUE_ARN" \
-            --batch-size 1 \
-            >/dev/null 2>&1 || true
-
-          # Esperar a que el mapping esté Enabled
-          for i in $(seq 1 30); do
-            state=$(awslocal lambda list-event-source-mappings --function-name ingestor --query 'EventSourceMappings[0].State' --output text || echo "None")
-            echo "Mapping state: $state"
-            if [ "$state" = "Enabled" ]; then break; fi
-            sleep 1
-          done
-
-          # Debug opcional
-          awslocal lambda list-functions || true
-          awslocal sqs list-queues || true
-          awslocal dynamodb list-tables || true
+          terraform -chdir=terraform init -input=false
+          terraform -chdir=terraform apply -auto-approve -input=false
 
       - name: Run tests
         env:
           PYTHONPATH: ${{ github.workspace }}
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
         run: pytest -q
+
+      - name: Terraform destroy (siempre)
+        if: always()
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+        run: terraform -chdir=terraform destroy -auto-approve || true
