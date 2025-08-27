@@ -3,28 +3,23 @@ name: ci
 on:
   push:
     branches: [ main ]
-    # Solo dispara si cambian estos paths (README/LICENCE/etc NO disparan)
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'template.yaml'
-      - 'docker-compose.yml'
-      - 'requirements*.txt'
-      - '.github/workflows/ci.yml'
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'template.yaml'
-      - 'docker-compose.yml'
-      - 'requirements*.txt'
-      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,11 +32,46 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          # si no existen, que no falle:
           pip install -r requirements.txt || true
           pip install -r requirements-dev.txt || true
+          # CLI para hablar con LocalStack (proporciona 'awslocal')
+          pip install awscli-local==0.20
+          python --version
+          pip --version
+
+      - name: Start LocalStack (docker compose)
+        run: |
+          docker compose -f docker-compose.yml up -d
+          echo "Esperando LocalStack listo en 4566..."
+          for i in {1..30}; do
+            if curl -fsS http://localhost:4566/health | grep -q '"ready": *true'; then
+              echo "LocalStack listo ✅"; break
+            fi
+            sleep 2
+          done
+          echo "Health:"
+          curl -fsS http://localhost:4566/health || true
+        shell: bash
+
+      # Si tus tests crean los recursos, podés dejar este paso. Si no, este bootstrap es inofensivo.
+      - name: Bootstrap resources (optional)
+        run: |
+          set -e
+          awslocal s3 mb s3://demo-bucket 2>/dev/null || true
+          awslocal dynamodb list-tables >/dev/null || true
+        shell: bash
 
       - name: Run tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest -q
+
+      - name: Docker logs (on failure)
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml ps
+          docker compose -f docker-compose.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml down -v
