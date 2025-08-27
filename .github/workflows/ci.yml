@@ -13,16 +13,14 @@ jobs:
 
     services:
       localstack:
-        image: localstack/localstack:latest
+        # 🔒 Pinned a versión community con Lambda v1
+        image: localstack/localstack:1.4.0
         ports:
           - 4566:4566
         env:
           SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs,sns"
-          # Forzar provider v1 para Lambda (evita necesidad de Docker en Actions)
-          PROVIDER_OVERRIDE_LAMBDA: "v1"
-          # Executor local (compat v1)
+          # v1 executor local: NO usa Docker
           LAMBDA_EXECUTOR: local
-          # Log más silencioso
           LS_LOG: warn
 
     steps:
@@ -53,16 +51,14 @@ jobs:
           for i in {1..60}; do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4566/_localstack/health || true)
             if [ "$code" = "200" ]; then
-              echo "LocalStack listo (HTTP 200)"
-              ok="yes"
-              break
+              echo "LocalStack listo (HTTP 200)"; ok="yes"; break
             fi
             sleep 2
           done
           if [ -z "$ok" ]; then
             echo "LocalStack no respondió a tiempo. Logs del contenedor:"
             docker ps -a || true
-            cid="$(docker ps -q --filter 'ancestor=localstack/localstack:latest' | head -n1)"
+            cid="$(docker ps -q --filter 'ancestor=localstack/localstack:1.4.0' | head -n1)"
             if [ -n "$cid" ]; then docker logs "$cid" || true; fi
             exit 1
           fi
