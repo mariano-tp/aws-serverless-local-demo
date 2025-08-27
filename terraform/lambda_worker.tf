@@ -14,7 +14,9 @@ resource "aws_lambda_function" "worker" {
 }
 
 resource "aws_lambda_event_source_mapping" "sqs_to_worker" {
-  event_source_arn = aws_sqs_queue.events.arn
+  event_source_arn = data.aws_sqs_queue.events.arn   # <- antes referenciaba a aws_sqs_queue.events
   function_name    = aws_lambda_function.worker.arn
   batch_size       = 1
+  enabled          = true
 }
+
