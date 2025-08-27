@@ -140,3 +140,5 @@ MIT — ver [`LICENSE`](./LICENSE).
 ## Créditos
 
 Repositorio de portfolio por @mariano-tp. Construido para demostrar IaC (SAM), serverless y CI/Tests en un entorno **100% local**.
+
+Ver también: [Código de Conducta](./CODE_OF_CONDUCT.md) · [Contribuir](./CONTRIBUTING.md) · [Seguridad](./SECURITY.md)
