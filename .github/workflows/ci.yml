@@ -17,7 +17,11 @@ jobs:
         ports:
           - 4566:4566
         env:
-          SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs"
+          # HABILITA TODOS LOS SERVICIOS QUE USÁS, INCLUYENDO SNS
+          SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs,sns"
+          # EVITA DOCKER PARA LAMBDA DENTRO DE GITHUB ACTIONS
+          LAMBDA_EXECUTOR: local
+          # (opcional) logging más silencioso
           LS_LOG: warn
 
     steps:
@@ -40,17 +44,29 @@ jobs:
         with:
           terraform_version: 1.6.6
 
-      - name: Wait for LocalStack
+      - name: Wait for LocalStack (health or timeout)
+        shell: bash
         run: |
-          echo "Esperando LocalStack..."
+          echo "Esperando LocalStack en http://localhost:4566 ..."
+          ok=""
           for i in {1..60}; do
-            if curl -fsS http://localhost:4566/_localstack/health | jq -re 'all(.services[]=="running")' >/dev/null; then
-              echo "LocalStack listo"; break
+            OUT="$(curl -sS --fail http://localhost:4566/_localstack/health || true)"
+            if echo "$OUT" | grep -q '"running"'; then
+              echo "LocalStack listo"
+              ok="yes"
+              break
             fi
             sleep 2
           done
+          if [ -z "$ok" ]; then
+            echo "LocalStack no respondió a tiempo. Logs:"
+            docker ps -a || true
+            cid="$(docker ps -q --filter 'ancestor=localstack/localstack:latest' | head -n1)"
+            if [ -n "$cid" ]; then docker logs "$cid" || true; fi
+            exit 1
+          fi
 
-      - name: Terraform init+apply (deploy Lambdas & recursos)
+      - name: Terraform init + apply (deploy infra)
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
@@ -67,7 +83,7 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: pytest -q
 
-      - name: Terraform destroy (siempre)
+      - name: Terraform destroy (always)
         if: always()
         env:
           AWS_ACCESS_KEY_ID: test
