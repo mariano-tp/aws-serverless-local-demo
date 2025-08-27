@@ -19,19 +19,6 @@ jobs:
         env:
           SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs"
           LS_LOG: warn
-        # Healthcheck robusto (sin jq)
-        options: >-
-          --health-cmd="bash -c 'curl -fsS http://localhost:4566/_localstack/health |
-          python - <<PY
-import json,sys
-d=json.load(sys.stdin)
-ok=all(v==\"running\" for v in d.get(\"services\",{}).values())
-print(\"ready\" if ok else \"notready\")
-PY
-          | grep -q ready'"
-          --health-interval=5s
-          --health-retries=30
-          --health-timeout=5s
 
     steps:
       - name: Checkout
