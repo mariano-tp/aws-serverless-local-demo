@@ -104,7 +104,7 @@ except FileNotFoundError: pass
 shutil.make_archive('/tmp/function', 'zip', 'src')
 PY
 
-          # ¡OJO! Asegurate que el handler existe (archivo src/handler.py, función lambda_handler)
+          # Handler: src/handler.py -> function lambda_handler
           awslocal lambda create-function \
             --function-name ingestor \
             --runtime python3.11 \
@@ -121,7 +121,7 @@ PY
             --batch-size 1 \
             >/dev/null 2>&1 || true
 
-          # ---- Esperar a que el mapping esté Enabled ----
+          # Esperar a que el mapping esté Enabled
           for i in $(seq 1 30); do
             state=$(awslocal lambda list-event-source-mappings --function-name ingestor --query 'EventSourceMappings[0].State' --output text || echo "None")
             echo "Mapping state: $state"
@@ -130,9 +130,9 @@ PY
           done
 
           # Debug opcional
+          awslocal lambda list-functions || true
           awslocal sqs list-queues || true
           awslocal dynamodb list-tables || true
-          awslocal lambda list-functions || true
 
       - name: Run tests
         env:
