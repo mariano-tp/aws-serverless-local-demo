@@ -90,6 +90,7 @@ jobs:
           }
           EOF
           )
+          # OJO: nada de comillas simples aquí
           awslocal sqs set-queue-attributes --queue-url "$QUEUE_URL" --attributes Policy="$POLICY_JSON"
 
           # Notificación S3 -> SQS ante ObjectCreated
@@ -97,7 +98,7 @@ jobs:
             --bucket events-bucket \
             --notification-configuration "{\"QueueConfigurations\":[{\"QueueArn\":\"$QUEUE_ARN\",\"Events\":[\"s3:ObjectCreated:*\"]}]}"
 
-          # DynamoDB (si ya existe, no falla)
+          # DynamoDB
           awslocal dynamodb create-table \
             --table-name events \
             --attribute-definitions AttributeName=pk,AttributeType=S AttributeName=sk,AttributeType=S \
