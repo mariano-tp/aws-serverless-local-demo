@@ -11,21 +11,32 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      localstack:
-        # 🔒 Pinned a versión community con Lambda v1
-        image: localstack/localstack:1.4.0
-        ports:
-          - 4566:4566
-        env:
-          SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs,sns"
-          # v1 executor local: NO usa Docker
-          LAMBDA_EXECUTOR: local
-          LS_LOG: warn
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # LocalStack (servicios libres que usamos)
+      - name: Start LocalStack
+        uses: localstack/setup-localstack@v1
+        with:
+          services: s3,sqs,sns,dynamodb
+          image-tag: "latest"
+          install-awslocal: "true"
+
+      # Espera a que LocalStack esté OK (el /health da 404, el bueno es /_localstack/health)
+      - name: Wait for LocalStack
+        run: |
+          set -euxo pipefail
+          for i in $(seq 1 120); do
+            out="$(curl -sf http://localhost:4566/_localstack/health || true)"
+            echo "$out"
+            # Consideramos "ready" si hay al menos 3 servicios en running
+            if echo "$out" | jq -e '.services | to_entries | map(select(.value=="running")) | length >= 3' >/dev/null; then
+              echo "LocalStack ready"
+              break
+            fi
+            sleep 1
+          done
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -38,40 +49,18 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
+      # Terraform init+apply
+      - name: Terraform init
+        run: terraform -chdir=terraform init -input=false
 
-      - name: Wait for LocalStack (health or timeout)
-        shell: bash
-        run: |
-          echo "Esperando LocalStack en http://localhost:4566 ..."
-          ok=""
-          for i in {1..60}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4566/_localstack/health || true)
-            if [ "$code" = "200" ]; then
-              echo "LocalStack listo (HTTP 200)"; ok="yes"; break
-            fi
-            sleep 2
-          done
-          if [ -z "$ok" ]; then
-            echo "LocalStack no respondió a tiempo. Logs del contenedor:"
-            docker ps -a || true
-            cid="$(docker ps -q --filter 'ancestor=localstack/localstack:1.4.0' | head -n1)"
-            if [ -n "$cid" ]; then docker logs "$cid" || true; fi
-            exit 1
-          fi
-
-      - name: Terraform init + apply (deploy infra)
+      - name: Terraform apply
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        run: |
-          terraform -chdir=terraform init -input=false
-          terraform -chdir=terraform apply -auto-approve -input=false
+        run: terraform -chdir=terraform apply -auto-approve
 
+      # Tests
       - name: Run tests
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -80,21 +69,11 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: pytest -q
 
-      - name: Terraform destroy (always)
+      # Terraform destroy (limpieza)
+      - name: Terraform destroy
         if: always()
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        run: |
-          terraform -chdir=terraform init -input=false || true
-          terraform -chdir=terraform destroy -auto-approve || true
-
-                - name: Pre-crear SQS (evitar waiter del provider)
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-        run: |
-          awslocal sqs create-queue --queue-name events-queue >/dev/null
-
+        run: terraform -chdir=terraform destroy -auto-approve
