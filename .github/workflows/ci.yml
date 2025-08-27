@@ -17,11 +17,12 @@ jobs:
         ports:
           - 4566:4566
         env:
-          # HABILITA TODOS LOS SERVICIOS QUE USÁS, INCLUYENDO SNS
+          # Servicios que usamos (agregamos SNS)
           SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs,sns"
-          # EVITA DOCKER PARA LAMBDA DENTRO DE GITHUB ACTIONS
+          # Nuevo flag (v2) para ejecutar lambdas SIN docker
+          LAMBDA_RUNTIME_EXECUTOR: local
+          # Dejado por compatibilidad, pero ya deprecado
           LAMBDA_EXECUTOR: local
-          # (opcional) logging más silencioso
           LS_LOG: warn
 
     steps:
@@ -44,22 +45,23 @@ jobs:
         with:
           terraform_version: 1.6.6
 
+      # Health-check robusto: sólo valida HTTP 200 (sin jq/grep frágiles)
       - name: Wait for LocalStack (health or timeout)
         shell: bash
         run: |
           echo "Esperando LocalStack en http://localhost:4566 ..."
           ok=""
           for i in {1..60}; do
-            OUT="$(curl -sS --fail http://localhost:4566/_localstack/health || true)"
-            if echo "$OUT" | grep -q '"running"'; then
-              echo "LocalStack listo"
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4566/_localstack/health || true)
+            if [ "$code" = "200" ]; then
+              echo "LocalStack listo (HTTP 200)"
               ok="yes"
               break
             fi
             sleep 2
           done
           if [ -z "$ok" ]; then
-            echo "LocalStack no respondió a tiempo. Logs:"
+            echo "LocalStack no respondió a tiempo. Logs del contenedor:"
             docker ps -a || true
             cid="$(docker ps -q --filter 'ancestor=localstack/localstack:latest' | head -n1)"
             if [ -n "$cid" ]; then docker logs "$cid" || true; fi
@@ -83,10 +85,13 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: pytest -q
 
+      # Aseguramos "init" antes de destruir, incluso si pasos anteriores fallaron
       - name: Terraform destroy (always)
         if: always()
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        run: terraform -chdir=terraform destroy -auto-approve || true
+        run: |
+          terraform -chdir=terraform init -input=false || true
+          terraform -chdir=terraform destroy -auto-approve || true
