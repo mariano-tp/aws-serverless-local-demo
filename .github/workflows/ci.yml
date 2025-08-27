@@ -44,14 +44,7 @@ jobs:
         run: |
           echo "Esperando LocalStack..."
           for i in {1..60}; do
-            if curl -fsS http://localhost:4566/_localstack/health | \
-               python - <<'PY'
-import json,sys
-d=json.load(sys.stdin)
-ok=all(v=="running" for v in d.get("services",{}).values())
-print("OK" if ok else "NO")
-PY
-            | grep -q OK; then
+            if curl -fsS http://localhost:4566/_localstack/health | jq -re 'all(.services[]=="running")' >/dev/null; then
               echo "LocalStack listo"; break
             fi
             sleep 2
