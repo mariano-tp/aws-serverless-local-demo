@@ -17,12 +17,12 @@ jobs:
         ports:
           - 4566:4566
         env:
-          # Servicios que usamos (agregamos SNS)
           SERVICES: "s3,sqs,lambda,dynamodb,iam,cloudwatch,logs,sns"
-          # Nuevo flag (v2) para ejecutar lambdas SIN docker
-          LAMBDA_RUNTIME_EXECUTOR: local
-          # Dejado por compatibilidad, pero ya deprecado
+          # Forzar provider v1 para Lambda (evita necesidad de Docker en Actions)
+          PROVIDER_OVERRIDE_LAMBDA: "v1"
+          # Executor local (compat v1)
           LAMBDA_EXECUTOR: local
+          # Log más silencioso
           LS_LOG: warn
 
     steps:
@@ -45,7 +45,6 @@ jobs:
         with:
           terraform_version: 1.6.6
 
-      # Health-check robusto: sólo valida HTTP 200 (sin jq/grep frágiles)
       - name: Wait for LocalStack (health or timeout)
         shell: bash
         run: |
@@ -85,7 +84,6 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: pytest -q
 
-      # Aseguramos "init" antes de destruir, incluso si pasos anteriores fallaron
       - name: Terraform destroy (always)
         if: always()
         env:
