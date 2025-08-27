@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          pip install awscli-local==0.20
+          pip install awscli-local==0.20 jq
 
       - name: Wait for LocalStack to be ready (host-side poll)
         env:
@@ -46,21 +46,18 @@ jobs:
           echo "Waiting for LocalStack on $LOCALSTACK_URL ..."
           for i in {1..120}; do
             if curl -fsS "$LOCALSTACK_URL/_localstack/health" | grep -qi "running"; then
-              echo "LocalStack is ready (/_localstack/health)."
-              break
+              echo "LocalStack is ready (/_localstack/health)."; break
             fi
             if curl -fsS "$LOCALSTACK_URL/health" | grep -qi "running"; then
-              echo "LocalStack is ready (/health)."
-              break
+              echo "LocalStack is ready (/health)."; break
             fi
             if awslocal s3 ls >/dev/null 2>&1; then
-              echo "LocalStack is ready (awslocal probe)."
-              break
+              echo "LocalStack is ready (awslocal probe)."; break
             fi
             sleep 3
           done
 
-      - name: Bootstrap test infra in LocalStack (S3+SQS+DDB + S3→SQS notification)
+      - name: Bootstrap test infra in LocalStack (S3+SQS+DDB + S3→SQS)
         env:
           AWS_DEFAULT_REGION: us-east-1
         run: |
@@ -73,7 +70,7 @@ jobs:
           QUEUE_ARN=$(awslocal sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 
           # Policy para permitir que S3 publique en la queue
-          POLICY_JSON=$(cat <<EOF
+          cat > /tmp/policy.json <<'POLICY'
           {
             "Version": "2012-10-17",
             "Statement": [
@@ -81,22 +78,32 @@ jobs:
                 "Effect": "Allow",
                 "Principal": { "Service": "s3.amazonaws.com" },
                 "Action": "SQS:SendMessage",
-                "Resource": "$QUEUE_ARN",
+                "Resource": "ARN_WILL_BE_REPLACED",
                 "Condition": {
                   "ArnLike": { "aws:SourceArn": "arn:aws:s3:::events-bucket" }
                 }
               }
             ]
           }
-          EOF
-          )
-          # OJO: nada de comillas simples aquí
-          awslocal sqs set-queue-attributes --queue-url "$QUEUE_URL" --attributes Policy="$POLICY_JSON"
+          POLICY
 
-          # Notificación S3 -> SQS ante ObjectCreated
+          # Inserta el ARN real en la policy
+          jq --arg arn "$QUEUE_ARN" '.Statement[0].Resource = $arn' /tmp/policy.json > /tmp/policy.final.json
+
+          # Crea el JSON de atributos: {"Policy":"<policy-minificada-en-string>"}
+          jq -nc --arg policy "$(jq -c . /tmp/policy.final.json)" '{Policy: $policy}' > /tmp/attrs.json
+
+          # Setea atributos con file:// (evita problemas de comillas)
+          awslocal sqs set-queue-attributes --queue-url "$QUEUE_URL" --attributes file:///tmp/attrs.json
+
+          # Notificación S3 -> SQS al crear objetos
+          jq -n --arg arn "$QUEUE_ARN" \
+            '{QueueConfigurations:[{QueueArn:$arn,Events:["s3:ObjectCreated:*"]}]}' \
+            > /tmp/notify.json
+
           awslocal s3api put-bucket-notification-configuration \
             --bucket events-bucket \
-            --notification-configuration "{\"QueueConfigurations\":[{\"QueueArn\":\"$QUEUE_ARN\",\"Events\":[\"s3:ObjectCreated:*\"]}]}"
+            --notification-configuration file:///tmp/notify.json
 
           # DynamoDB
           awslocal dynamodb create-table \
