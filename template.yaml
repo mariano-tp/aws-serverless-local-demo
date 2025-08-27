@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Demo serverless local (Lambda + API + DynamoDB)
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        TABLE_NAME: TodosTable
+
+Resources:
+  TodosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: TodosTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  CreateTodoFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: app/
+      Handler: handler.create_todo
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TodosTable
+      Events:
+        ApiPost:
+          Type: Api
+          Properties:
+            Path: /todos
+            Method: post
+
+  GetTodoFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: app/
+      Handler: handler.get_todo
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TodosTable
+      Events:
+        ApiGet:
+          Type: Api
+          Properties:
+            Path: /todos/{id}
+            Method: get
