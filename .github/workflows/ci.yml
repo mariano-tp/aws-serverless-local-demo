@@ -7,12 +7,19 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  lint-test:
+  test:
     runs-on: ubuntu-latest
+
+    services:
+      localstack:
+        image: localstack/localstack:3
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: s3,sqs,dynamodb
+          DEBUG: 1
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,42 +33,64 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          pip install genbadge[all]
+          pip install awscli-local
 
-      - name: Pre-commit (format & lint)
+      - name: Wait for LocalStack health
         run: |
-          pre-commit run --all-files
+          echo "Esperando LocalStack..."
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4566/_localstack/health || true)
+            if [ "$code" = "200" ]; then
+              curl -s http://localhost:4566/_localstack/health
+              echo; echo "OK"
+              break
+            fi
+            sleep 2
+          done
 
-      - name: Pre-run pipeline (generate artifacts)
+      - name: Bootstrap test infra (S3 + SQS + DDB + S3→SQS)
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 1) S3 y SQS
+          awslocal s3 mb s3://events-bucket || true
+          QUEUE_URL=$(awslocal sqs create-queue --queue-name events-queue --query QueueUrl --output text)
+          QUEUE_ARN=$(awslocal sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+
+          # 2) Policy SQS (usar JSON compacto, sin multilínea)
+          POLICY=$(python - <<'PY'
+import json, os
+print(json.dumps({
+  "Version":"2012-10-17",
+  "Statement":[{
+    "Effect":"Allow",
+    "Principal":{"Service":"s3.amazonaws.com"},
+    "Action":"SQS:SendMessage",
+    "Resource":os.environ["QUEUE_ARN"],
+    "Condition":{"ArnLike":{"aws:SourceArn":"arn:aws:s3:::events-bucket"}}
+  }]
+}))
+PY
+)
+          awslocal sqs set-queue-attributes --queue-url "$QUEUE_URL" --attributes Policy="$POLICY"
+
+          # 3) Notificación S3 → SQS
+          awslocal s3api put-bucket-notification-configuration \
+            --bucket events-bucket \
+            --notification-configuration "{\"QueueConfigurations\":[{\"QueueArn\":\"$QUEUE_ARN\",\"Events\":[\"s3:ObjectCreated:*\"]}]}"
+
+          # 4) DynamoDB + wait
+          awslocal dynamodb create-table \
+            --table-name events \
+            --attribute-definitions AttributeName=id,AttributeType=S \
+            --key-schema AttributeName=id,KeyType=HASH \
+            --billing-mode PAYPERREQUEST || true
+          awslocal dynamodb wait table-exists --table-name events
+
+      - name: Run tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python -c "from src.pipeline import train_and_evaluate; train_and_evaluate()"
-
-      - name: Run tests with coverage
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          pytest -q --cov=src --cov-report=xml
-
-      - name: Generate coverage badge
-        run: |
-          mkdir -p badges
-          genbadge coverage -i coverage.xml -o badges/coverage.svg
-
-      - name: Upload artifacts (model, metrics, ROC, coverage)
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts
-          path: |
-            artifacts/**
-            coverage.xml
-            badges/coverage.svg
-
-      - name: Commit coverage badge
-        if: github.event_name != 'pull_request'
-        uses: EndBug/add-and-commit@v9
-        with:
-          add: "badges/coverage.svg"
-          message: "ci: update coverage badge [skip ci]"
+        run: pytest -q
