@@ -89,3 +89,12 @@ jobs:
         run: |
           terraform -chdir=terraform init -input=false || true
           terraform -chdir=terraform destroy -auto-approve || true
+
+                - name: Pre-crear SQS (evitar waiter del provider)
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          awslocal sqs create-queue --queue-name events-queue >/dev/null
+
