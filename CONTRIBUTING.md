@@ -3,28 +3,26 @@
 Gracias por tu interés 🙌. Este repo está pensado para ser simple y reproducible.
 
 ## Flujo de trabajo
-1. **Abrí un issue** usando la plantilla (Bug / Mejora), si aplica.
-2. **Creá una rama** desde `main`:
-   - `feat/<breve-descripcion>` para nuevas features
-   - `fix/<breve-descripcion>` para bugs
-   - `docs/...`, `ci/...` para documentación o pipelines
-3. **Commits** estilo *Conventional Commits*:
-   - `feat:`, `fix:`, `docs:`, `ci:`, `chore:`
+1. **Abrí un issue** para proponer cambios de arquitectura o runtimes.
+2. **Creá una rama** desde `main` (`feat/...`, `fix/...`, `docs/...`, `ci/...`).
+3. **Commits** estilo *Conventional Commits*.
 4. **Pull Request**:
-   - Un solo tema por PR
+   - Un tema por PR
    - Link al issue
+   - Explicar qué servicios/variables de LocalStack cambian
    - Pasar todos los checks de CI
-   - Actualizar README/capturas si aplica
 
 ## Estilo / calidad
-- Markdown simple y claro (español).
-- Evitar archivos grandes en el repo (usar `/images` para capturas).
-- Mantener consistencia de badges y secciones (README).
+- Documentar arquitectura en README.
+- Usar `/images` para diagramas si aplica.
+- Mantener badges consistentes.
 
 ## CI
 Los PRs deben quedar en **verde**:
-- Linter / tests del proyecto (según repo).
-- Validaciones (p.ej. `docker compose config`, `terraform fmt/validate`, `helm lint`, `pytest`, etc).
+- LocalStack levantado con `localstack/setup-localstack@v0`
+- `terraform apply`
+- Test de integración: subir a S3 y verificar item en DynamoDB
+- `terraform destroy`
 
 ## Licencia
 Al contribuir aceptás que tu aporte se publica bajo **MIT** (ver `LICENSE`).
