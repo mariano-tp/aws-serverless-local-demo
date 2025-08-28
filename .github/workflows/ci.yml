@@ -4,39 +4,32 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
+    # LocalStack como servicio del job (sin Action externa)
+    services:
+      localstack:
+        image: localstack/localstack:3
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: s3,sqs,dynamodb,sns
+          DEFAULT_REGION: us-east-1
+          LS_LOG: info
+        # healthcheck para esperar a que esté “running”
+        options: >-
+          --health-cmd="bash -ce 'curl -sf http://localhost:4566/_localstack/health | jq -e \".services | all(.[]; .status==\\\"running\\\")\"'"
+          --health-interval=5s
+          --health-retries=60
+          --health-timeout=3s
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # LocalStack (servicios libres que usamos)
-      - name: Start LocalStack
-        uses: localstack/setup-localstack@v1
-        with:
-          services: s3,sqs,sns,dynamodb
-          image-tag: "latest"
-          install-awslocal: "true"
-
-      # Espera a que LocalStack esté OK (el /health da 404, el bueno es /_localstack/health)
-      - name: Wait for LocalStack
-        run: |
-          set -euxo pipefail
-          for i in $(seq 1 120); do
-            out="$(curl -sf http://localhost:4566/_localstack/health || true)"
-            echo "$out"
-            # Consideramos "ready" si hay al menos 3 servicios en running
-            if echo "$out" | jq -e '.services | to_entries | map(select(.value=="running")) | length >= 3' >/dev/null; then
-              echo "LocalStack ready"
-              break
-            fi
-            sleep 1
-          done
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -48,32 +41,54 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install awscli-local jq
 
-      # Terraform init+apply
-      - name: Terraform init
-        run: terraform -chdir=terraform init -input=false
+      - name: Esperar LocalStack (defensa extra)
+        run: |
+          for i in {1..60}; do
+            OUT=$(curl -s http://localhost:4566/_localstack/health || true)
+            echo "$OUT"
+            echo "$OUT" | jq -e '.services | all(.[]; .status=="running")' && break
+            sleep 2
+          done
 
-      - name: Terraform apply
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-        run: terraform -chdir=terraform apply -auto-approve
+      # Si tenés un paso de “bootstrap” (crear bucket/queue y notificación S3→SQS), dejalo acá
+      # Si lo haces con Terraform en otro workflow, podés omitir este paso.
+      - name: Bootstrap test infra (S3 + SQS + notif S3→SQS)
+        run: |
+          set -euxo pipefail
+          awslocal s3 mb s3://events-bucket || true
+          QUEUE_URL=$(awslocal sqs create-queue --queue-name events-queue --query QueueUrl --output text)
+          # Política para permitir que S3 mande a SQS
+          awslocal sqs set-queue-attributes \
+            --queue-url "$QUEUE_URL" \
+            --attributes Policy="$(cat <<'JSON'
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": { "Service": "s3.amazonaws.com" },
+              "Action": "SQS:SendMessage",
+              "Resource": "arn:aws:sqs:us-east-1:000000000000:events-queue",
+              "Condition": { "ArnLike": { "aws:SourceArn": "arn:aws:s3:::events-bucket" } }
+            }]
+          }
+          JSON
+          )"
+          # Notificación S3 → SQS en “ObjectCreated”
+          awslocal s3api put-bucket-notification-configuration \
+            --bucket events-bucket \
+            --notification-configuration '{
+              "QueueConfigurations": [{
+                "QueueArn": "arn:aws:sqs:us-east-1:000000000000:events-queue",
+                "Events": ["s3:ObjectCreated:*"]
+              }]
+            }'
 
-      # Tests
       - name: Run tests
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
         run: pytest -q
-
-      # Terraform destroy (limpieza)
-      - name: Terraform destroy
-        if: always()
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-        run: terraform -chdir=terraform destroy -auto-approve
