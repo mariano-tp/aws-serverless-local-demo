@@ -13,7 +13,7 @@ Este repositorio es parte de un **portfolio personal**. El código es educativo/
 - Quedan fuera servicios de terceros y entornos que no controla el proyecto.
 
 ## Tratamiento
-- Atención en modalidad de **mejor esfuerzo** (sin SLA). Intento responder dentro de **7 días**.
+- Atención en modalidad de **mejor esfuerzo** (sin SLA).
 - Si corresponde, prepararé un fix o documentaré mitigaciones en un release o commit.
 
 ## Claves/secretos
