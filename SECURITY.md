@@ -1,21 +1,18 @@
-# Política de Seguridad
+# Security Policy
 
-Este repositorio es parte de un **portfolio personal**. El código es educativo/demostrativo y no corresponde a un servicio en producción.
+This repository is part of a **personal portfolio**. The code is educational/demonstrative and is not tied to any production service.
 
-## Cómo reportar
-- **Privado (recomendado):** en este repo, usá **Security → Report a vulnerability** para enviar el informe de forma privada.
-- **Si no ves esa opción:** abrí un **Issue** con el título **`Security: request private contact`** *sin detalles técnicos*. Te invitaré a un **Security Advisory** privado para continuar el intercambio.
+## How to Report
+Security reports are **not actively monitored** for this repository. Please **do not submit sensitive information** (PoC, credentials, personal data) via Issues/PRs or any public channel.
 
-> **No publiques PoC ni datos sensibles** en espacios públicos (Issues/PRs).
+## Scope
+- Applies only to the **code and configurations** within this repository.
+- Third‑party services and environments not controlled by this project are out of scope.
 
-## Alcance
-- Solo aplica al **código y configuraciones** de este repositorio.
-- Quedan fuera servicios de terceros y entornos que no controla el proyecto.
+## Handling
+This is a personal portfolio. Security reports are **not handled**.  
+**No fixes or mitigations should be expected.**
 
-## Tratamiento
-- Atención en modalidad de **mejor esfuerzo** (sin SLA).
-- Si corresponde, prepararé un fix o documentaré mitigaciones en un release o commit.
-
-## Claves/secretos
-- No incluir secretos reales en Issues/PRs.
-- Si detectás credenciales expuestas, reportalo por canal privado para su rotación/eliminación.
+## Keys/Secrets
+- Do not include real secrets in Issues/PRs.
+- If you believe credentials are exposed, **do not disclose them publicly**. Since this repo is not monitored, rotate/remove them on your side as needed.
