@@ -7,26 +7,26 @@
 
 # AWS Serverless Local Demo
 
-Demo serverless **AWS-like** sin cuenta cloud. Prueba el flujo **S3 → Lambda → DynamoDB** de forma local con **LocalStack** y CI en **GitHub Actions** (unit + integración).
+Serverless **AWS-like** demo without a cloud account. Test the **S3 → Lambda → DynamoDB** flow locally with **LocalStack** and CI in **GitHub Actions** (unit + integration).
 
 ## CI
-- Levanta LocalStack como *service* (S3, SQS, DynamoDB).
-- Hace *bootstrap*: bucket + queue + notificación S3→SQS + tabla DDB.
-- Corre un test que sube un objeto, consume el evento de SQS y persiste en DDB.
+- Spins up LocalStack as a *service* (S3, SQS, DynamoDB).
+- Bootstraps resources: bucket + queue + S3→SQS notification + DDB table.
+- Runs a test that uploads an object, consumes the SQS event, and persists it in DDB.
 
-## Ejecutar 100% online
-1. Subí este repo a GitHub.
-2. Abrí **Actions → ci → Run workflow**.
-3. Debería quedar **verde** ✅.
+## Run 100% online
+1. Push this repo to GitHub.
+2. Go to **Actions → ci → Run workflow**.
+3. The workflow should turn **green**.
 
-## Correr local (opcional)
+## Run locally (optional)
 ```bash
 docker compose up -d
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
 pytest -q
 ```
 
-## Estructura
+## Structure
 ```
 .
 ├── .github/workflows/ci.yml
@@ -37,7 +37,8 @@ pytest -q
     └── integration/
         └── test_flow_localstack.py
 ```
-## Créditos
-Repositorio de portfolio por @mariano-tp. Licencia MIT.
 
-Ver también: [Código de Conducta](./CODE_OF_CONDUCT.md) · [Contribuir](./CONTRIBUTING.md) · [Seguridad](./SECURITY.md)
+## Credits
+Portfolio repository by @mariano-tp. Licensed under MIT.
+
+See also: [Code of Conduct](./CODE_OF_CONDUCT.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
