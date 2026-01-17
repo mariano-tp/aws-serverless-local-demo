@@ -25,9 +25,11 @@ Serverless AWS-like demo without a cloud account. Validates the S3 → Lambda �
 ```bash
 docker compose up -d
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
-pytest -q
-
+pytest -q  
+```
+  
 ## Structure
+
 ```
 .
 ├── .github/workflows/ci.yml
