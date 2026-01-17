@@ -9,24 +9,23 @@
 
 # AWS Serverless Local Demo
 
-Serverless **AWS-like** demo without a cloud account. Test the **S3 → Lambda → DynamoDB** flow locally with **LocalStack** and CI in **GitHub Actions** (unit + integration).
+Serverless AWS-like demo without a cloud account. Validates the S3 → Lambda → DynamoDB flow using LocalStack and CI in GitHub Actions (unit + integration).
 
-## CI
-- Spins up LocalStack as a *service* (S3, SQS, DynamoDB).
-- Bootstraps resources: bucket + queue + S3→SQS notification + DDB table.
-- Runs a test that uploads an object, consumes the SQS event, and persists it in DDB.
+## What gets validated in CI (GitHub Actions)
+- Starts LocalStack as a service (S3, SQS, DynamoDB)
+- Bootstraps resources: bucket, queue, S3→SQS notification, DDB table
+- Runs an integration test that uploads an object, consumes the SQS event, and persists it in DDB
 
-## Run 100% online
-1. Push this repo to GitHub.
-2. Go to **Actions → ci → Run workflow**.
-3. The workflow should turn **green**.
+## Validate 100% online (GitHub Actions)
+1. Push this repo to GitHub
+2. Go to Actions → ci → Run workflow
+3. The workflow should turn green
 
-## Run locally (optional)
+## Local run (optional)
 ```bash
 docker compose up -d
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
 pytest -q
-```
 
 ## Structure
 ```
