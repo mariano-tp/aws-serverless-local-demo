@@ -45,7 +45,3 @@ Repositorio de portfolio por @mariano-tp. Licencia MIT.
 
 Ver también: [Code of Conduct](./CODE_OF_CONDUCT.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
-
-docker compose up -d
-export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
-pytest -q
