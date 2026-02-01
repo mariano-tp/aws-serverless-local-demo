@@ -1,12 +1,12 @@
 > Available languages / Idiomas disponibles: [*English*](README.md) / [*Español*](README.ES.md)
 
-Back to repository: [Home](https://github.com/mariano-tp/mariano-tp/blob/main/README.md)  
+Back to repository: [Home](https://github.com/metorresponce/metorresponce/blob/main/README.md)  
 
-[![ci](https://img.shields.io/github/actions/workflow/status/mariano-tp/aws-serverless-local-demo/ci.yml?branch=main&label=ci&style=flat-square)](https://github.com/mariano-tp/aws-serverless-local-demo/actions/workflows/ci.yml)
-[![last commit](https://img.shields.io/github/last-commit/mariano-tp/aws-serverless-local-demo?style=flat-square)](https://github.com/mariano-tp/aws-serverless-local-demo/commits/main)
-[![release](https://img.shields.io/github/v/release/mariano-tp/aws-serverless-local-demo?display_name=tag&style=flat-square)](https://github.com/mariano-tp/aws-serverless-local-demo/releases)
+[![ci](https://img.shields.io/github/actions/workflow/status/metorresponce/aws-serverless-local-demo/ci.yml?branch=main&label=ci&style=flat-square)](https://github.com/metorresponce/aws-serverless-local-demo/actions/workflows/ci.yml)
+[![last commit](https://img.shields.io/github/last-commit/metorresponce/aws-serverless-local-demo?style=flat-square)](https://github.com/metorresponce/aws-serverless-local-demo/commits/main)
+[![release](https://img.shields.io/github/v/release/metorresponce/aws-serverless-local-demo?display_name=tag&style=flat-square)](https://github.com/metorresponce/aws-serverless-local-demo/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![stars](https://img.shields.io/github/stars/mariano-tp/aws-serverless-local-demo?style=flat-square)](https://github.com/mariano-tp/aws-serverless-local-demo/stargazers)
+[![stars](https://img.shields.io/github/stars/metorresponce/aws-serverless-local-demo?style=flat-square)](https://github.com/metorresponce/aws-serverless-local-demo/stargazers)
 
 
 # AWS Serverless Local Demo
@@ -44,6 +44,6 @@ pytest -q
 ```
 
 ## Credits
-Portfolio repository by @mariano-tp. Licensed under MIT.
+Portfolio repository by @metorresponce. Licensed under MIT.
 
 See also: [Code of Conduct](./CODE_OF_CONDUCT.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
